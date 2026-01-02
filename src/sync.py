@@ -2,10 +2,11 @@ import os
 import logging
 from .gopro_client import GoProPlus
 
-def sync_account(auth_token, target_folder, callback=None):
+def sync_account(auth_token, target_folder, callback=None, is_cancelled=None):
     """
     Syncs the GoPro Cloud account to the target folder.
     callback(message, progress_percent) is an optional function for GUI updates.
+    is_cancelled() is an optional function that returns True if the sync should stop.
     """
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
@@ -19,6 +20,11 @@ def sync_account(auth_token, target_folder, callback=None):
         return False
 
     if callback: callback("Fetching media list...", 5)
+    
+    if is_cancelled and is_cancelled():
+        if callback: callback("Sync cancelled.", 0)
+        return False
+
     media_list = client.get_media_list()
     logging.info(f"Found {len(media_list)} items in cloud.")
     
@@ -28,6 +34,11 @@ def sync_account(auth_token, target_folder, callback=None):
     failed = 0
     
     for i, item in enumerate(media_list):
+        if is_cancelled and is_cancelled():
+            if callback: callback("Sync cancelled.", 0)
+            logging.info("Sync cancelled by user.")
+            return False
+
         progress = 10 + int((i / total_items) * 90)
         filename = item.get("filename") or f"{item['id']}.mp4" # fallback
         if callback: callback(f"Processing {filename}...", progress)

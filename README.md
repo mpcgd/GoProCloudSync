@@ -18,13 +18,15 @@ A comprehensive tool to synchronize your GoPro Cloud media library to a local di
 
 To use this tool, you need your **GoPro Cloud Auth Token**. There is no official public API for the cloud media library, so you must retrieve your session token:
 
-1.  Log in to [GoPro Media Library](https://plus.gopro.com/media-library/) in your browser.
+1.  Log in to [GoPro Login](https://gopro.com/login) in your browser.
 2.  Open **Developer Tools** (F12 or Right Click -> Inspect).
 3.  Go to the **Network** tab.
-4.  Refresh the page and look for a request to `api.gopro.com` (e.g., `search`, `user`, or `me`).
-5.  Click on the request and find the **Request Headers**.
-6.  Copy the token from the `Authorization` header. It usually looks like `Bearer <LONG_TOKEN_STRING>`. You only need the `<LONG_TOKEN_STRING>` part.
-    *   *Alternatively, look for the `gp_access_token` cookie.*
+4.  Refresh the page and filter for `api.gopro.com` or look for requests to `/search`, `/user`, or `/me`.
+5.  Click on a request and view the **Request Headers**.
+6.  Locate the connection cookies or the `Authorization` header.
+    *   **Recommended**: Find the `gp_access_token` inside the `Cookie` header. It starts with `eyJ...`.
+    *   *Alternatively*: Copy the token from `Authorization: Bearer <TOKEN>`.
+    *   *Note*: The token provided should strictly be the JWT string (starting with `eyJ...`), without `Bearer` prefix or cookie name.
 
 ## Setup & Usage
 
