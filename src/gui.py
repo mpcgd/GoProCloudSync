@@ -3,8 +3,16 @@ from toga.style import Pack
 from toga.style.pack import COLUMN, ROW
 import threading
 import os
+import sys
+
+# Ensure project root is in path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 import keyring
-from .sync import sync_account
+from src.sync import sync_account
 
 SERVICE_ID = "gopro-cloud-sync"
 ACCOUNT_ID = "auth_token"
@@ -47,16 +55,16 @@ class GoProSyncApp(toga.App):
         self.main_window.show()
 
     async def select_folder(self, widget):
-        path = await self.main_window.select_folder_dialog(title="Select Download Folder")
+        path = await self.main_window.dialog(toga.SelectFolderDialog(title="Select Download Folder"))
         if path:
             self.folder_input.value = str(path)
 
-    def start_sync(self, widget):
+    async def start_sync(self, widget):
         token = self.token_input.value
         folder = self.folder_input.value
         
         if not token:
-            self.main_window.error_dialog("Error", "Please enter an Auth Token.")
+            await self.main_window.dialog(toga.ErrorDialog("Error", "Please enter an Auth Token."))
             return
             
         # Save token

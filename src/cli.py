@@ -2,12 +2,18 @@ import argparse
 import os
 import sys
 import logging
+# Ensure project root is in path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 try:
     import keyring
 except ImportError:
     keyring = None
 
-from .sync import sync_account
+from src.sync import sync_account
 
 SERVICE_ID = "gopro-cloud-sync"
 ACCOUNT_ID = "auth_token"
