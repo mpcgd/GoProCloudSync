@@ -35,9 +35,11 @@ def sync_account(auth_token, target_folder, callback=None):
         logging.info(f"Processing {i+1}/{total_items}: {filename}")
         
         try:
-            success = client.download_media_item(item, target_folder)
-            if success:
-                downloaded += 1 # Or skipped if it existed, client returns True for skip too
+            status = client.download_media_item(item, target_folder)
+            if status == "downloaded":
+                downloaded += 1
+            elif status == "skipped":
+                skipped += 1
             else:
                 failed += 1
         except Exception as e:
@@ -45,5 +47,5 @@ def sync_account(auth_token, target_folder, callback=None):
             failed += 1
             
     if callback: callback("Sync complete.", 100)
-    logging.info(f"Sync finished. Processed {total_items}. Failed: {failed}")
+    logging.info(f"Sync finished. Processed {total_items}. Downloaded: {downloaded}, Skipped: {skipped}, Failed: {failed}")
     return True

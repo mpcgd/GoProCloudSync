@@ -2,7 +2,11 @@ import argparse
 import os
 import sys
 import logging
-import keyring
+try:
+    import keyring
+except ImportError:
+    keyring = None
+
 from .sync import sync_account
 
 SERVICE_ID = "gopro-cloud-sync"
@@ -14,17 +18,24 @@ def get_token():
     if token:
         return token
         
-    # 2. Keyring
-    try:
-        token = keyring.get_password(SERVICE_ID, ACCOUNT_ID)
-        if token:
-            return token
-    except Exception as e:
-        logging.warning(f"Keyring access failed: {e}")
+    # 2. Keyring (if available)
+    if keyring:
+        try:
+            token = keyring.get_password(SERVICE_ID, ACCOUNT_ID)
+            if token:
+                return token
+        except Exception as e:
+            logging.warning(f"Keyring access failed: {e}")
+    else:
+        logging.debug("Keyring not installed, skipping keyring lookup.")
         
     return None
 
 def set_token(token):
+    if not keyring:
+        logging.error("Keyring module not installed. Cannot save token.")
+        return
+
     try:
         keyring.set_password(SERVICE_ID, ACCOUNT_ID, token)
         print("Token saved to keyring.")

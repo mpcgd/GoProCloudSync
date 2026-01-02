@@ -28,19 +28,19 @@ class GoProSyncApp(toga.App):
         folder_btn = toga.Button("Select Folder", on_press=self.select_folder)
         
         self.progress_bar = toga.ProgressBar(max=100)
-        self.status_label = toga.Label("Ready", style=Pack(padding_top=10))
+        self.status_label = toga.Label("Ready", style=Pack(margin_top=10))
         
-        start_btn = toga.Button("Start Sync", on_press=self.start_sync, style=Pack(padding_top=10))
+        start_btn = toga.Button("Start Sync", on_press=self.start_sync, style=Pack(margin_top=10))
         
         box = toga.Box(
             children=[
-                toga.Box(children=[toga.Label("Token: "), self.token_input], style=Pack(direction=ROW, padding=5)),
-                toga.Box(children=[self.folder_input, folder_btn], style=Pack(direction=ROW, padding=5)),
+                toga.Box(children=[toga.Label("Token: "), self.token_input], style=Pack(direction=ROW, margin=5)),
+                toga.Box(children=[self.folder_input, folder_btn], style=Pack(direction=ROW, margin=5)),
                 start_btn,
                 self.progress_bar,
                 self.status_label
             ],
-            style=Pack(direction=COLUMN, padding=10)
+            style=Pack(direction=COLUMN, margin=10)
         )
         
         self.main_window.content = box
@@ -74,19 +74,13 @@ class GoProSyncApp(toga.App):
         
     def run_sync_thread(self, token, folder):
         def update_ui(msg, progress):
-            self.app.add_background_task(lambda app: self.update_status(msg, progress))
+            def _update():
+                self.status_label.text = msg
+                if progress is not None:
+                     self.progress_bar.value = progress
+            self.app.loop.call_soon_threadsafe(_update)
 
-        # Toga's main loop handles UI updates via background tasks or yield
-        # but here we are in a thread. threading + toga needs care.
-        # Actually sync_account is blocking.
-        # We can pass a callback that schedules UI updates on main thread?
-        # Toga requires async handling usually or specific thread handling.
-        # self.app.loop.call_soon_threadsafe works in some frameworks.
-        # Toga doesn't expose loop easily everywhere.
-        # Best way: Use asyncio inside `start_sync` if sync was async, but it's blocking requests.
-        # So thread is correct.
-        
-        # We use a wrapper for the callback
+        # Run sync
         sync_account(token, folder, callback=update_ui)
         
     def update_status(self, msg, progress):
@@ -95,7 +89,7 @@ class GoProSyncApp(toga.App):
              self.progress_bar.value = progress
 
 def main():
-    return GoProSyncApp()
+    return GoProSyncApp("GoPro Cloud Sync", "com.gopro.cloudsync")
 
 if __name__ == '__main__':
     main().main_loop()

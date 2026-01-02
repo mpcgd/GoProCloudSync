@@ -2,6 +2,7 @@ import os
 import sys
 import requests
 import logging
+import zipfile
 
 class GoProPlus:
     def __init__(self, auth_token):
@@ -126,10 +127,11 @@ class GoProPlus:
         }
         cookies = {"gp_access_token": self.auth_token}
 
-        # Verify if target exists
-        if os.path.exists(target_path):
-            logging.info(f"File {target_path} already exists. Skipping.")
-            return True
+        # Verify if target exists (Caller should have checked this, but if we are here we likely want to overwrite or it's a new file)
+        # if os.path.exists(target_path):
+        #    logging.info(f"File {target_path} already exists. Skipping.")
+        #    return True
+        # REMOVED to allow simple overwrites if caller determined it's needed.
 
         logging.info(f"Downloading {media_id} to {target_path} (zip mode)...")
         
@@ -155,28 +157,28 @@ class GoProPlus:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
             
-            # Unzip
-            import zipfile
+    # Unzip
             try:
                 with zipfile.ZipFile(temp_zip, 'r') as z:
-                    # Expecting one file
                     names = z.namelist()
-                    if names:
-                        # Extract all (should be just the media files)
-                        # Caution: paths in zip?
-                        # Usually flat or simple.
+                    # Filter for likely media files (ignore __MACOSX, hidden files)
+                    media_files = [n for n in names if not n.startswith('__') and not n.startswith('.') and '/' not in n]
+                    
+                    if media_files:
+                        # Extract only the first valid media file
+                        extracted_name = media_files[0]
                         target_dir = os.path.dirname(target_path)
-                        z.extractall(target_dir) 
+                        z.extract(extracted_name, target_dir)
                         
-                        # Rename if needed? 
-                        # The filenames in zip should match the original filename.
-                        # If target_path is just a directory, we are good.
-                        # If target_path was a full path to the file, we might have a mismatch if zip name is different.
-                        # I will assume the caller passes a DIRECTORY or the specific filename logic needs 
-                        # to match the zip content.
+                        extracted_full_path = os.path.join(target_dir, extracted_name)
                         
-                        # Let's change the API to 'download_to_directory'.
-                        pass
+                        # Rename if the extracted filename doesn't match our target specific path
+                        if extracted_full_path != target_path:
+                            # Remove target if it exists (though check earlier handled this, race condition possible)
+                            if os.path.exists(target_path):
+                                os.remove(target_path)
+                            os.rename(extracted_full_path, target_path)
+                            
             except zipfile.BadZipFile:
                 logging.error("Downloaded file is not a valid zip.")
                 return False
@@ -202,8 +204,8 @@ class GoProPlus:
             if remote_size:
                 local_size = os.path.getsize(final_path)
                 if local_size == int(remote_size):
-                    logging.info(f"skipping {filename}, exists and size matches")
-                    return True
+                    logging.info(f"Skipping {filename}, exists and size matches")
+                    return "skipped"
         
         # Try direct link first (optimization)
         direct_url = self.get_download_url(item)
@@ -215,9 +217,12 @@ class GoProPlus:
                     with open(final_path, 'wb') as f:
                         for chunk in r.iter_content(chunk_size=8192):
                             f.write(chunk)
-                return True
+                return "downloaded"
             except Exception as e:
                 logging.warning(f"Direct download failed: {e}. Falling back to zip method.")
 
         # Fallback to zip method
-        return self.download_file(item["id"], final_path)
+        if self.download_file(item["id"], final_path):
+            return "downloaded"
+        
+        return "failed"
