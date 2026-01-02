@@ -11,6 +11,9 @@ COPY src/ ./src/
 ENV GO_PRO_AUTH_TOKEN=""
 ENV PYTHONUNBUFFERED=1
 
-# Default command runs the CLI
+# Create a directory for downloads
+RUN mkdir -p /downloads
+
+# Default command runs the CLI pointing to /downloads
 ENTRYPOINT ["python", "-m", "src.cli"]
-CMD ["--help"]
+CMD ["--folder", "/downloads"]

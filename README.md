@@ -91,13 +91,13 @@ docker build -t gopro-sync .
 ```
 
 **Run the Container:**
-Map a local volume to `/data` in the container and pass the token.
+Map a local volume to `/downloads` in the container and pass the token. The container defaults to syncing to `/downloads`.
 
 ```bash
 docker run --rm \
-  -v /path/to/local/backup:/data \
+  -v /path/to/local/backup:/downloads \
   -e GO_PRO_AUTH_TOKEN="YOUR_TOKEN_HERE" \
-  gopro-sync --folder /data
+  gopro-sync
 ```
 
 **Synology NAS Setup via Task Scheduler:**
