@@ -118,7 +118,7 @@ class GoProPlus:
              
         return None
 
-    def download_file(self, media_id, target_path):
+    def download_file(self, media_id, target_path, max_retries=3):
         # Fallback method using the zip/source endpoint which seems reliable
         url = f"{self.host}/media/x/zip/source"
         params = {
@@ -127,66 +127,86 @@ class GoProPlus:
         }
         cookies = {"gp_access_token": self.auth_token}
 
-        # Verify if target exists (Caller should have checked this, but if we are here we likely want to overwrite or it's a new file)
-        # if os.path.exists(target_path):
-        #    logging.info(f"File {target_path} already exists. Skipping.")
-        #    return True
-        # REMOVED to allow simple overwrites if caller determined it's needed.
-
-        logging.info(f"Downloading {media_id} to {target_path} (zip mode)...")
-        
-        with requests.get(url, params=params, headers=self._headers(), cookies=cookies, stream=True) as r:
-            if r.status_code != 200:
-                logging.error(f"Download failed for {media_id}: {r.status_code}")
-                return False
-            
-            # This returns a ZIP file. We might want to save it as .zip or stream unzip it.
-            # Mirroring usually implies keeping the original format.
-            # If the source gives a zip, we get a zip.
-            # If the user wants the raw file (mp4/jpg), we need to extract it.
-            
-            # Let's save as .zip for safety first, or unzip?
-            # User said "mirror ... files". Usually means .mp4 or .jpg.
-            # If I download 1 file via zip/source, it's a zip containing one file.
-            
-            # I will implement unzip logic.
-            # Save to temporary zip, then extract, then delete zip.
-            
-            temp_zip = target_path + ".zip"
-            with open(temp_zip, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-    # Unzip
+        for attempt in range(max_retries):
             try:
-                with zipfile.ZipFile(temp_zip, 'r') as z:
-                    names = z.namelist()
-                    # Filter for likely media files (ignore __MACOSX, hidden files)
-                    media_files = [n for n in names if not n.startswith('__') and not n.startswith('.') and '/' not in n]
-                    
-                    if media_files:
-                        # Extract only the first valid media file
-                        extracted_name = media_files[0]
-                        target_dir = os.path.dirname(target_path)
-                        z.extract(extracted_name, target_dir)
-                        
-                        extracted_full_path = os.path.join(target_dir, extracted_name)
-                        
-                        # Rename if the extracted filename doesn't match our target specific path
-                        if extracted_full_path != target_path:
-                            # Remove target if it exists (though check earlier handled this, race condition possible)
-                            if os.path.exists(target_path):
-                                os.remove(target_path)
-                            os.rename(extracted_full_path, target_path)
-                            
-            except zipfile.BadZipFile:
-                logging.error("Downloaded file is not a valid zip.")
-                return False
-            finally:
-                if os.path.exists(temp_zip):
-                    os.remove(temp_zip)
-                    
-        return True
+                logging.info(f"Downloading {media_id} to {target_path} (zip mode, attempt {attempt + 1}/{max_retries})...")
+
+                with requests.get(url, params=params, headers=self._headers(), cookies=cookies, stream=True, timeout=30) as r:
+                    if r.status_code != 200:
+                        logging.error(f"Download failed for {media_id}: {r.status_code}")
+                        if attempt < max_retries - 1:
+                            logging.info(f"Retrying download for {media_id}...")
+                            continue
+                        return False
+
+                    # Check content type to determine if it's a ZIP or direct file
+                    content_type = r.headers.get('Content-Type', '')
+                    is_zip = 'zip' in content_type or 'application/zip' in content_type
+
+                    # Save to temporary file first
+                    temp_file = target_path + ".temp"
+                    with open(temp_file, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+
+                    if is_zip:
+                        # Handle ZIP format (for videos)
+                        try:
+                            with zipfile.ZipFile(temp_file, 'r') as z:
+                                names = z.namelist()
+                                # Filter for likely media files (ignore __MACOSX, hidden files)
+                                media_files = [n for n in names if not n.startswith('__') and not n.startswith('.') and '/' not in n]
+
+                                if media_files:
+                                    # Extract only the first valid media file
+                                    extracted_name = media_files[0]
+                                    target_dir = os.path.dirname(target_path)
+                                    z.extract(extracted_name, target_dir)
+
+                                    extracted_full_path = os.path.join(target_dir, extracted_name)
+
+                                    # Rename if the extracted filename doesn't match our target specific path
+                                    if extracted_full_path != target_path:
+                                        if os.path.exists(target_path):
+                                            os.remove(target_path)
+                                        os.rename(extracted_full_path, target_path)
+                                    return True
+
+                        except zipfile.BadZipFile:
+                            logging.warning("File was not a valid ZIP, treating as direct download")
+                            # Fall through to direct file handling
+                            pass
+                        finally:
+                            if os.path.exists(temp_file):
+                                os.remove(temp_file)
+                    else:
+                        # Handle direct file download (for photos)
+                        if os.path.exists(target_path):
+                            os.remove(target_path)
+                        os.rename(temp_file, target_path)
+                        return True
+
+                    # If we get here, ZIP extraction failed but we have the temp file
+                    # Try to use it as a direct file (might be the actual media)
+                    if os.path.exists(temp_file):
+                        if os.path.exists(target_path):
+                            os.remove(target_path)
+                        os.rename(temp_file, target_path)
+                        return True
+
+                # Success - return True
+                return True
+
+            except (requests.exceptions.RequestException, OSError) as e:
+                logging.warning(f"Download attempt {attempt + 1} failed for {media_id}: {e}")
+                if attempt < max_retries - 1:
+                    logging.info(f"Retrying download for {media_id}...")
+                    continue
+                else:
+                    logging.error(f"All download attempts failed for {media_id}")
+                    return False
+
+        return False
 
     def download_media_item(self, item, target_dir):
         # Wrapper that handles filename and checks
@@ -212,7 +232,7 @@ class GoProPlus:
         if direct_url:
             logging.info(f"Downloading {filename} via direct link...")
             try:
-                with requests.get(direct_url, stream=True) as r:
+                with requests.get(direct_url, stream=True, timeout=30) as r:
                     r.raise_for_status()
                     with open(final_path, 'wb') as f:
                         for chunk in r.iter_content(chunk_size=8192):
