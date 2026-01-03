@@ -13,6 +13,20 @@ A comprehensive tool to synchronize your GoPro Cloud media library to a local di
     -   **Library**: Reusable Python modules for custom integrations.
 -   **Secure Credentials**: Supports system keyring for safe token storage.
 -   **Docker Ready**: Includes a `Dockerfile` for easy deployment on Synology NAS or other container platforms.
+-   **Automatic .360 File Handling**: Automatically detects and extracts GoPro .360 files that are actually ZIP archives
+
+## File Handling Notes
+
+**Automatic .360 File Processing:**
+GoPro sometimes returns files with `.360` extensions that are actually ZIP archives. The sync process automatically:
+
+1. **Detects** `.360` files that are ZIP archives
+2. **Renames** them to `.zip` temporarily
+3. **Extracts** the actual media files
+4. **Cleans up** temporary ZIP files
+5. **Renames** extracted media to proper filenames
+
+This ensures you get actual video files (`.mp4`, `.mov`, etc.) instead of ZIP archives.
 
 ## Prerequisites
 
@@ -81,25 +95,95 @@ python -m src.gui
 -   Select your target download folder.
 -   Click **Start Sync**.
 
-### 4. Docker (Synology NAS / Server)
+### 4. Docker (Multi-Platform Support)
 
-You can run this tool as a container, which is perfect for scheduled backups on a NAS.
+You can run this tool as a container, which is perfect for scheduled backups on NAS devices, servers, or any platform.
 
-**Build the Image:**
+#### Dockerfile Overview
+
+You only need **`Dockerfile.multiarch`** - a single Dockerfile that supports all platforms including x86_64 (AMD/Intel) and ARM64.
+
+#### Prerequisites
+
+1. **Docker with buildx support** (included in modern Docker versions)
+2. **Buildx setup** (run once):
+   ```bash
+   docker buildx create --use
+   ```
+
+#### Building for Different Platforms
+
+**Build for x86_64 (AMD/Intel):**
 ```bash
-docker build -t gopro-sync .
+docker buildx build \
+  --platform linux/amd64 \
+  -t gopro-sync-x86_64 \
+  -f Dockerfile.multiarch \
+  --load .
 ```
 
-**Run the Container:**
-Map a local volume to `/downloads` in the container and pass the token. The container defaults to syncing to `/downloads`.
-
+**Build for ARM64 (Raspberry Pi, Apple Silicon, etc.):**
 ```bash
+docker buildx build \
+  --platform linux/arm64 \
+  -t gopro-sync-arm64 \
+  -f Dockerfile.multiarch \
+  --load .
+```
+
+**Build for Native Platform (automatic detection):**
+```bash
+docker buildx build \
+  -t gopro-sync-native \
+  -f Dockerfile.multiarch \
+  --load .
+```
+
+#### Deployment
+
+**Save Container to Tar File:**
+```bash
+docker save gopro-sync-x86_64 -o gopro-sync-x86_64.tar
+```
+
+**Load and Run Container:**
+```bash
+# Load the container
+docker load -i gopro-sync-x86_64.tar
+
+# Run the container
 docker run --rm \
-  -v /path/to/local/backup:/downloads \
+  -v /path/to/your/backup:/downloads \
   -e GO_PRO_AUTH_TOKEN="YOUR_TOKEN_HERE" \
-  gopro-sync
+  gopro-sync-x86_64
 ```
+
+#### Multi-Platform Build (Advanced)
+
+Build for multiple platforms simultaneously:
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t gopro-sync:multi-platform \
+  -f Dockerfile.multiarch \
+  --push  # Push to registry
+```
+
+#### Troubleshooting
+
+**"exec format error":**
+This occurs when the container architecture doesn't match the host. Solution:
+1. Check container architecture: `docker inspect --format='{{.Architecture}}' your-container`
+2. Rebuild with correct platform: `docker buildx build --platform linux/amd64 -t correct-container -f Dockerfile.multiarch --load .`
+
+#### Best Practices
+
+1. **Use buildx** for proper cross-compilation
+2. **Specify platform** explicitly with `--platform`
+3. **Use `--load`** to load the image to local Docker
+4. **Use tar files** for easy deployment
+5. **Keep only `Dockerfile.multiarch`** for simplicity
 
 **Synology NAS Setup via Task Scheduler:**
-1.  Upload the image or pull it.
-2.  Create a scheduled task with the `docker run` command above.
+1. Upload the image or pull it
+2. Create a scheduled task with the `docker run` command above

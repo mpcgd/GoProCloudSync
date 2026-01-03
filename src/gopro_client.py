@@ -217,7 +217,7 @@ class GoProPlus:
              filename = f"{item['id']}.{ext}"
 
         final_path = os.path.join(target_dir, filename)
-        
+
         if os.path.exists(final_path):
             # Check integrity? Size?
             remote_size = item.get("file_size")
@@ -226,7 +226,7 @@ class GoProPlus:
                 if local_size == int(remote_size):
                     logging.info(f"Skipping {filename}, exists and size matches")
                     return "skipped"
-        
+
         # Try direct link first (optimization)
         direct_url = self.get_download_url(item)
         if direct_url:
@@ -243,6 +243,65 @@ class GoProPlus:
 
         # Fallback to zip method
         if self.download_file(item["id"], final_path):
+            # Handle .360 files that are actually ZIP files
+            if filename.endswith('.360'):
+                self._handle_360_file(final_path)
             return "downloaded"
-        
+
         return "failed"
+
+    def _handle_360_file(self, file_path):
+        """
+        Handle .360 files that are actually ZIP files.
+        Renames to .zip and extracts the contents.
+        """
+        try:
+            logging.info(f"Processing .360 file as ZIP: {file_path}")
+
+            # Rename .360 to .zip
+            zip_path = file_path + '.zip'
+            os.rename(file_path, zip_path)
+
+            # Extract the ZIP file
+            with zipfile.ZipFile(zip_path, 'r') as z:
+                # Extract all files to the same directory
+                z.extractall(os.path.dirname(zip_path))
+
+                # Find the extracted media file (usually the first non-metadata file)
+                extracted_files = z.namelist()
+                media_files = [f for f in extracted_files
+                              if not f.startswith('__') and not f.startswith('.')]
+
+                if media_files:
+                    # Get the first media file
+                    first_media = media_files[0]
+                    extracted_path = os.path.join(os.path.dirname(zip_path), first_media)
+
+                    # Rename the extracted file to the original .360 name (but with proper extension)
+                    final_name = os.path.splitext(file_path)[0] + os.path.splitext(first_media)[1]
+                    final_path = os.path.join(os.path.dirname(file_path), final_name)
+
+                    # Remove original .360.zip file
+                    os.remove(zip_path)
+
+                    # Rename extracted file to final name
+                    if extracted_path != final_path:
+                        os.rename(extracted_path, final_path)
+                        logging.info(f"Extracted and renamed: {final_path}")
+                    else:
+                        logging.info(f"Extracted: {final_path}")
+
+                    return True
+
+            # Clean up the zip file if extraction failed
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+
+        except Exception as e:
+            logging.error(f"Failed to process .360 file {file_path}: {e}")
+            # Restore original file if possible
+            if os.path.exists(file_path + '.zip'):
+                os.rename(file_path + '.zip', file_path)
+            return False
+
+        return False
