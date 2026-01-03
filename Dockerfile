@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM python:3.11-alpine as builder
+FROM python:3.11-alpine AS builder
 
 WORKDIR /app
 
@@ -30,11 +30,11 @@ RUN apk add --no-cache libstdc++ ca-certificates
 # Copy binary from builder
 COPY --from=builder /app/dist/gopro-sync /app/gopro-sync
 
-# Env variable for token
-ENV GO_PRO_AUTH_TOKEN=""
-
 # Create a directory for downloads
 RUN mkdir -p /downloads
+
+# Token should be passed at runtime for security
+# Run example: docker run -e GO_PRO_AUTH_TOKEN="your_token" -v /downloads:/downloads gopro-sync
 
 # Default command
 ENTRYPOINT ["/app/gopro-sync"]
