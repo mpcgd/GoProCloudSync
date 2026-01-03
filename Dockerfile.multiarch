@@ -1,0 +1,59 @@
+# Multi-architecture Dockerfile for GoPro Cloud Sync
+# Supports multiple platforms including x86_64
+# Usage: docker build --build-arg TARGET_PLATFORM=linux/amd64 -t gopro-sync-amd64 .
+#        docker build --build-arg TARGET_PLATFORM=linux/arm64 -t gopro-sync-arm64 .
+
+# Stage 1: Builder
+ARG TARGET_PLATFORM=linux/amd64
+FROM --platform=${TARGET_PLATFORM} python:3.11-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3-dev \
+    upx \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements based on architecture
+COPY requirements.txt requirements-cli.txt ./
+RUN pip install --no-cache-dir -r requirements-cli.txt pyinstaller
+
+COPY src/ ./src/
+
+# Build standalone binary with platform-specific output path
+ARG TARGET_ARCH=x86_64
+RUN pyinstaller --onefile --clean --name gopro-sync --distpath /app/dist/${TARGET_ARCH} src/cli.py && \
+    upx --best --lzma /app/dist/${TARGET_ARCH}/gopro-sync
+
+# Stage 2: Final minimal image
+FROM --platform=${TARGET_PLATFORM} debian:stable-slim
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libstdc++6 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binary from builder with platform-specific path
+ARG TARGET_ARCH=x86_64
+COPY --from=builder /app/dist/${TARGET_ARCH}/gopro-sync /app/gopro-sync
+
+# Create a directory for downloads
+RUN mkdir -p /downloads
+
+# Set architecture label
+ARG TARGET_ARCH=x86_64
+LABEL org.opencontainers.image.arch="${TARGET_ARCH}"
+
+# Token should be passed at runtime for security
+# Run examples:
+# docker run -e GO_PRO_AUTH_TOKEN="your_token" -v /downloads:/downloads gopro-sync-amd64
+# docker run -e GO_PRO_AUTH_TOKEN="your_token" -v /downloads:/downloads gopro-sync-arm64
+
+# Default command
+ENTRYPOINT ["/app/gopro-sync"]
+CMD ["--folder", "/downloads"]
