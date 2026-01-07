@@ -44,7 +44,7 @@ def set_token(token):
 
     try:
         keyring.set_password(SERVICE_ID, ACCOUNT_ID, token)
-        print("Token saved to keyring.")
+        logging.info("Token saved to keyring.")
     except Exception as e:
         logging.error(f"Failed to save token to keyring: {e}")
 
@@ -68,16 +68,16 @@ def main():
         token = get_token()
         
     if not token:
-        print("Error: No auth token found. Provide it via --token or GO_PRO_AUTH_TOKEN env var.")
+        logging.error("No auth token found. Provide it via --token or GO_PRO_AUTH_TOKEN env var.")
         sys.exit(1)
         
     folder = args.folder
     if not folder:
         # Default? Cur dir?
         folder = os.getcwd()
-        print(f"No folder specified. Using current directory: {folder}")
+        logging.info(f"No folder specified. Using current directory: {folder}")
         
-    print(f"Syncing to {folder}...")
+    logging.info(f"Syncing to {folder}...")
     success = sync_account(token, folder)
     if not success:
         sys.exit(1)

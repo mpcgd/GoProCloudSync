@@ -1,8 +1,12 @@
 import os
 import sys
+import time
 import requests
 import logging
 import zipfile
+
+# Rate limiting: minimum seconds between API calls
+API_DELAY = 0.5
 
 class GoProPlus:
     def __init__(self, auth_token):
@@ -81,6 +85,9 @@ class GoProPlus:
                 
             media_items.extend(page_media)
             logging.info(f"Fetched page {current_page}, found {len(page_media)} items.")
+            
+            # Rate limiting: delay between API calls
+            time.sleep(API_DELAY)
             
             current_page += 1
             if current_page > pages:
